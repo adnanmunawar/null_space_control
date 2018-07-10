@@ -1,4 +1,4 @@
-function arm_sim(M, C, G, J)
+function arm_sim(M, C, G, J, v_filter)
 syms q1 q2 q3
 syms dq1 dq2 dq3
 syms ddq1 ddq2 ddq3
@@ -16,20 +16,22 @@ global n_joints
  M = simplify(M);
  C = simplify(C);
  G = simplify(G);
+ B = 0*ones(diag(n_joints));
  
  q = zeros(n_joints, 1);
- q = [1.0,0.3,-0.2]';
+ q = [1.0,0.3,0.2]';
  dq = zeros(n_joints, 1);
  ddq = zeros(n_joints, 1);
- x_d = [-2.0,1.5]';
- x_d_null = q;
+ x_d = [1.0, 1.5]';
+ x_d_null = [0,0,0]';
  x_e = get_ee_pos(q);
  
  dt = 0.005;
  q_list = zeros(n_joints,2000);
  Kp = 5*diag([1,1]);
  Kd = sqrt(Kp);
- Kn = 0*diag(ones(1,n_joints));
+ Kn = diag([0,5,0]);
+ Knd = sqrt(Kn);
  fig = figure;
  grid on
  hold on
@@ -42,12 +44,15 @@ global n_joints
  uText = text(-3,2.5,'Input');
  nText = text(-3,2.0, 'Tnull');
  tText = text(-3,1.5,'t');
+ qText = text(-3,-1.0,'t');
+ xNullText = text(-3,-1.5,'t');
+ eNullText = text(-3,-2.0,'t');
  xlim([-4,4]);
  ylim([-4,4]);
  ctime = 0;
  set(gca,'ButtonDownFcn', @click_callback);
  i=1;
- while norm(x_d(1:2) - x_e(1:2)) > 0.1
+ while norm(x_d_null - q) > 0.001
     q_list(:,i) = q;
     arm_plot(q)
     dq = dq + (ddq * dt);
@@ -56,9 +61,13 @@ global n_joints
     x_e = get_ee_pos(q);
     e = (x_d - x_e);
     de = (x_e - x_e_pre)*(1/dt);
-    x_ee = Kp*e - Kd*de;
-    x_ee = velocity_filter(Kp, Kd, x_e, de, x_d, [2;1]);
-    x_null = Kn * (x_d_null - q);
+    V_max = .3;
+    if v_filter == false
+        x_ee = Kp*e - Kd*de;
+    else
+        x_ee = velocity_filter(Kp, Kd, x_e, de, x_d, V_max);
+    end
+    x_null = Kn * (x_d_null - q) - Knd * dq;
     if n_joints == 2
         q1 = q(1); q2 = q(2);
         dq1 = dq(1); dq2 = dq(2);
@@ -84,13 +93,13 @@ global n_joints
         end
         M_ee = V * S * U.';
     end
-    Jee_numeric_inv = double(M_ee * Jee_numeric / M_numeric);
+    xJee_numeric_inv = double(M_ee * Jee_numeric / M_numeric);
 %     x_ee = [0.0, 0.0]';
     Fe = M_ee * x_ee;
     Te = double(Jee_numeric.' * Fe);
-    T_null = (eye(n_joints) - Jee_numeric.' * Jee_numeric_inv) * x_null;
-    T_ee = (Te + G_numeric - T_null);
-    ddq = double(M_numeric \ (T_ee - C_numeric - G_numeric));
+    T_null = (eye(n_joints) - Jee_numeric.' * xJee_numeric_inv) * x_null;
+    T_ee = (Te + G_numeric + T_null);
+    ddq = double(M_numeric \ (T_ee - C_numeric - G_numeric - B*dq));
 %     ddq = Te;
     ctime = ctime + dt;
     i = i+1;
@@ -106,6 +115,9 @@ global n_joints
     eeAxes.YData = x_e(2);
     eeAxes.UData = temp_x_ee(1);
     eeAxes.VData = temp_x_ee(2);
+    qText.String = strcat('q= [', num2str(q'), ']');
+    xNullText.String = strcat('x_{null}= [', num2str(x_d_null'), ']');
+    eNullText.String = strcat('e_{null}= [', num2str((x_d_null - q)'), ']');
  end
  lim = i;
  for j=1:10
@@ -163,13 +175,12 @@ if any(sat < 1)
     [val, index] = min(sat);
     unclipped = Kp .* x_tilde(index);
     clipped = Kd .* Vmax .* sign(x_tilde(index));
-    scale = ones(2,1) .* clipped ./ unclipped;
+    scale = ones(2,1) .* sat(index);
     scale(index) = 1;
 end
-clipped = sat ./ scale;
-clipped(clipped > 1) = 1;
-clipped(clipped < 0) = 0;
-Ux = -Kd .* (dx + clipped .* scale .* lamb .* x_tilde);
+clipped_sat = sat ./ scale;
+clipped_sat(clipped_sat > 1) = 1;
+Ux = -Kd .* (dx + clipped_sat .* scale .* lamb .* x_tilde);
 end
 
 function [x_ee] = get_ee_pos(q)

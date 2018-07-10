@@ -1,11 +1,8 @@
+function velocity_filtering(vmax, x, dx, tx)
 kp = [2,2]';
 kv = sqrt(kp);
-vmax = 2.0;
-dx = [1.1, 1.1]';
-xyz = [5.0, 5.0]';
-target_xyz = [0.0, 0.0]';
 lamb = kp ./ kv
-x_tilde = xyz - target_xyz
+x_tilde = x - tx
 sat = vmax ./ (lamb .* abs(x_tilde))
 scale = ones(2,1)
 if any(sat < 1)
@@ -16,6 +13,6 @@ if any(sat < 1)
     scale(index) = 1
 end
 clipped = sat ./ scale
-clipped(clipped > 1) = 1
-clipped(clipped < 0) = 0
+clipped(clipped > 1) = 1;
 u_xyz = -kv .* (dx + clipped .* scale .* lamb .* x_tilde)
+end
