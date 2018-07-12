@@ -16,13 +16,13 @@ global n_joints
  M = simplify(M);
  C = simplify(C);
  G = simplify(G);
- B = 0*ones(diag(n_joints));
+ B = ones(diag(n_joints));
  
  q = zeros(n_joints, 1);
  q = [1.0,0.3,0.2]';
  dq = zeros(n_joints, 1);
  ddq = zeros(n_joints, 1);
- x_d = [1.0, 1.5]';
+ x_d = [-1.9, -1.5]';
  x_d_null = [0,0,0]';
  x_e = get_ee_pos(q);
  
@@ -30,8 +30,8 @@ global n_joints
  q_list = zeros(n_joints,2000);
  Kp = 5*diag([1,1]);
  Kd = sqrt(Kp);
- Kn = diag([0,5,0]);
- Knd = sqrt(Kn);
+ Kp_null = diag([0,0,5]);
+ Kd_null = sqrt(Kp_null);
  fig = figure;
  grid on
  hold on
@@ -50,13 +50,16 @@ global n_joints
  xlim([-4,4]);
  ylim([-4,4]);
  ctime = 0;
+ e = (x_d - x_e);
+ e_null = Kp_null * (x_d_null - q) - Kd_null * dq;
  set(gca,'ButtonDownFcn', @click_callback);
  i=1;
- while norm(x_d_null - q) > 0.001
+ while norm(e_null) > 0.01 || norm(e) > 0.1
     q_list(:,i) = q;
     arm_plot(q)
     dq = dq + (ddq * dt);
     q = q + (dq * dt);
+%     q = wrapTo2Pi(q);
     x_e_pre = x_e;
     x_e = get_ee_pos(q);
     e = (x_d - x_e);
@@ -67,7 +70,7 @@ global n_joints
     else
         x_ee = velocity_filter(Kp, Kd, x_e, de, x_d, V_max);
     end
-    x_null = Kn * (x_d_null - q) - Knd * dq;
+    e_null = Kp_null * wrapToPi(x_d_null - q) - Kd_null * dq;
     if n_joints == 2
         q1 = q(1); q2 = q(2);
         dq1 = dq(1); dq2 = dq(2);
@@ -97,7 +100,7 @@ global n_joints
 %     x_ee = [0.0, 0.0]';
     Fe = M_ee * x_ee;
     Te = double(Jee_numeric.' * Fe);
-    T_null = (eye(n_joints) - Jee_numeric.' * xJee_numeric_inv) * x_null;
+    T_null = (eye(n_joints) - Jee_numeric.' * xJee_numeric_inv) * e_null;
     T_ee = (Te + G_numeric + T_null);
     ddq = double(M_numeric \ (T_ee - C_numeric - G_numeric - B*dq));
 %     ddq = Te;
@@ -117,7 +120,7 @@ global n_joints
     eeAxes.VData = temp_x_ee(2);
     qText.String = strcat('q= [', num2str(q'), ']');
     xNullText.String = strcat('x_{null}= [', num2str(x_d_null'), ']');
-    eNullText.String = strcat('e_{null}= [', num2str((x_d_null - q)'), ']');
+    eNullText.String = strcat('e_{null}= [', num2str(wrapToPi(x_d_null - q)'), ']');
  end
  lim = i;
  for j=1:10
