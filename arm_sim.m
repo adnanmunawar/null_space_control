@@ -19,18 +19,25 @@ global n_joints
  B = ones(diag(n_joints));
  
  q = zeros(n_joints, 1);
- q = [1.0,0.3,0.2]';
  dq = zeros(n_joints, 1);
  ddq = zeros(n_joints, 1);
- x_d = [-1.9, -1.5]';
- x_d_null = [0,0,0]';
- x_e = get_ee_pos(q);
+ x_d = [-1.9, 1.5]';
  
- dt = 0.005;
+ dt = 0.01;
  q_list = zeros(n_joints,2000);
- Kp = 5*diag([1,1]);
+ Kp = 10*diag([1,1]);
  Kd = sqrt(Kp);
- Kp_null = diag([0,0,5]);
+ if n_joints == 2
+     null_gains = ones(2,1);
+     x_d_null = [0,0]';
+     q = [1.0,0.3]';
+ elseif n_joints == 3
+     null_gains = ones(3,1);
+     x_d_null = [0,0,0]';
+     q = [0.6,0.4,-0.6]';
+ end
+ x_e = get_ee_pos(q);
+ Kp_null = diag(null_gains);
  Kd_null = sqrt(Kp_null);
  fig = figure;
  grid on
@@ -57,16 +64,15 @@ global n_joints
  while norm(e_null) > 0.01 || norm(e) > 0.1
     q_list(:,i) = q;
     arm_plot(q)
-    dq = dq + (ddq * dt);
-    q = q + (dq * dt);
-%     q = wrapTo2Pi(q);
+    dq = ddq * dt;
+    q = q + (dq * dt) + 0.5 * ddq * dt * dt;
     x_e_pre = x_e;
     x_e = get_ee_pos(q);
     e = (x_d - x_e);
-    de = (x_e - x_e_pre)*(1/dt);
+    de = (x_e - x_e_pre) / dt;
     V_max = .3;
     if v_filter == false
-        x_ee = Kp*e - Kd*de;
+        x_ee = Kp * e - Kd * de;
     else
         x_ee = velocity_filter(Kp, Kd, x_e, de, x_d, V_max);
     end
@@ -83,27 +89,25 @@ global n_joints
     C_numeric = eval(C);
     G_numeric = eval(G);
     M_ee_inv = Jee_numeric / M_numeric * Jee_numeric.';
-    if (abs(det(Jee_numeric * Jee_numeric.'))) > 0.005
+    if (abs(det(Jee_numeric * Jee_numeric.'))) > 0.001
         M_ee = double(inv(M_ee_inv));
     else
         [U,S,V] = svd(M_ee_inv);
         for j=1:size(S,1)
-            if S(j,j) < 0.005
+            if S(j,j) < 0.00025
                 S(j,j) = 0;
             else
                 S(j,j) = 1/S(j,j);
             end
         end
-        M_ee = V * S * U.';
+        M_ee = V.' * S * U.';
     end
     xJee_numeric_inv = double(M_ee * Jee_numeric / M_numeric);
-%     x_ee = [0.0, 0.0]';
     Fe = M_ee * x_ee;
     Te = double(Jee_numeric.' * Fe);
     T_null = (eye(n_joints) - Jee_numeric.' * xJee_numeric_inv) * e_null;
     T_ee = (Te + G_numeric + T_null);
-    ddq = double(M_numeric \ (T_ee - C_numeric - G_numeric - B*dq));
-%     ddq = Te;
+    ddq = double(M_numeric \ (T_ee - C_numeric - G_numeric - 0*B*dq));
     ctime = ctime + dt;
     i = i+1;
     peAxes.XData = [peAxes.XData, x_e(1)];

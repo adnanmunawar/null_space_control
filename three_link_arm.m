@@ -15,7 +15,7 @@ clear all
 global l1 l2 l3
 global m1 m2 m3 ml
 syms q1 q2 q3 dq1 dq2 dq3 ddq1 ddq2 ddq3 real;
-syms l1 l2 l3 m1 m2 m3 ml g real;
+syms l1 l2 l3 m1 m2 m3 ml I1 I2 I3 g real;
 
 % l1 = 1; l2=1; l3=1; m1=0.5; m2=0.5; m3=0.5; g=9.81;
 %%
@@ -109,9 +109,9 @@ v_ml = simplify(v_ml);
 
 %%
 % Then we compute the Kinematic Energy of each mass
-K1 = 0.5 * m1 * (v_m1.' * v_m1);
-K2 = 0.5 * m2 * (v_m2.' * v_m2);
-K3 = 0.5 * m3 * (v_m3.' * v_m3);
+K1 = 0.5 * m1 * (v_m1.' * v_m1) + 0.5 * I1 * dq1^2;
+K2 = 0.5 * m2 * (v_m2.' * v_m2) + 0.5 * I2 * (dq1 + dq2)^2;
+K3 = 0.5 * m3 * (v_m3.' * v_m3) + 0.5 * I3 * (dq1 + dq2 + dq3)^2;
 Kl = 0.5 * ml * (v_ml.' * v_ml);
 
 K1 = simplify(K1);
@@ -136,12 +136,15 @@ Pl = simplify(Pl);
 %%
 % Summing up all the Kinematic energies and Potential energies
 
-K = K1 + K2 + K3 + Kl;
-P = P1 + P2 + P3 + Pl;
+K = K1 + K2 + K3;
+P = P1 + P2 + P3;
 
 %%
 % Computing the lagrangian
-m1 = 3; m2 = 2; m3 = 1; ml = 1; l1 = 1; l2 = 1; l3 = 1; g = 9.8;
+m1 = 3; m2 = 2; m3 = 1; ml = 0;
+I1 = 100; I2 = 100; I3 = 100;
+l1 = 1; l2 = 1; l3 = 1;
+g = 9.8;
 L = simplify( K - P );
 L = subs(L);
 
